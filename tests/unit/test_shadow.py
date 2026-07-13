@@ -769,6 +769,54 @@ def test_execute_solver_plan_active_complete_records_pinned_vms(tmp_path):
     assert complete["step_retries"] >= 1
 
 
+@pytest.mark.parametrize(
+    "fallback_to_greedy,expected_balance_calls",
+    [
+        (False, 1),  # step Balancing only; no remainder fallback
+        (True, 2),   # step Balancing + remainder fallback (default)
+    ],
+)
+def test_execute_solver_plan_remainder_respects_fallback_to_greedy(
+    tmp_path, fallback_to_greedy, expected_balance_calls
+):
+    """Remainder Balancing() after exhausted retries follows fallback_to_greedy."""
+    from proxlb_solver.models import Solution, SolverStats
+
+    data = copy.deepcopy(_MINIMAL_PROXLB_DATA)
+    plan = _make_one_step_plan("vm-100", "node1", "node2")
+
+    mock_api = MagicMock()
+    mock_api.cluster.resources.get.return_value = [
+        {"name": "vm-100", "node": "node1"},
+    ]
+
+    infeasible_sol = Solution(
+        feasible=False,
+        placements={},
+        migrations=[],
+        stats=SolverStats(status="INFEASIBLE", objective=0, load_gap=0.0,
+                          migration_count=0, wall_time_ms=1.0),
+    )
+
+    mock_balancing, patch_dict = _make_mock_proxlb_modules()
+    run_file = str(tmp_path / "run.jsonl")
+    open(run_file, "w").close()
+
+    solver_cfg = {
+        "active_step_retries": 1,
+        "use_reservations": True,
+        "timeout_seconds": 5,
+        "fallback_to_greedy": fallback_to_greedy,
+    }
+
+    with patch.dict(sys.modules, patch_dict):
+        with mock_patch("proxlb_solver.solver.solve", return_value=infeasible_sol):
+            from proxlb_solver.shadow import execute_solver_plan
+            execute_solver_plan(mock_api, data, plan, solver_cfg, run_file)
+
+    assert mock_balancing.balance.call_count == expected_balance_calls
+
+
 def test_active_step_result_has_step_retry_field(tmp_path):
     """active_step_result events must carry a 'step_retry' field."""
     data = copy.deepcopy(_MINIMAL_PROXLB_DATA)

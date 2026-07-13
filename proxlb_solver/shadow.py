@@ -49,6 +49,7 @@ def _normalize_solver_cfg(cfg: Any) -> types.SimpleNamespace:
             use_reservations=bool(cfg.get("use_reservations", True)),
             timeout_seconds=float(cfg.get("timeout_seconds", 30.0)),
             active_step_retries=int(cfg.get("active_step_retries", 3)),
+            fallback_to_greedy=bool(cfg.get("fallback_to_greedy", True)),
         )
     return cfg  # type: ignore[no-any-return]  # already a Pydantic Config.Solver
 
@@ -736,8 +737,11 @@ def execute_solver_plan(
         _guest_get(guests[n], "node_target") != _guest_get(guests[n], "node_current")
         for n in remainder if n in guests
     ):
-        log.info(f"[solver] active: handing {len(remainder)} remainder VM(s) to ProxLB Balancing")
-        try:
-            _Balancing.balance(proxmox_api, proxlb_data)
-        except Exception as exc:
-            log.warning(f"[solver] active: remainder Balancing() failed: {exc}")
+        if cfg.fallback_to_greedy:
+            log.info( f"[solver] active: handing {len(remainder)} remainder VM(s) to ProxLB Balancing" )
+            try:
+                _Balancing.balance(proxmox_api, proxlb_data)
+            except Exception as exc:
+                log.warning(f"[solver] active: remainder Balancing() failed: {exc}")
+        else:
+            log.warning(f"[solver] active: skipping remainder Balancing() for {len(remainder)} VM(s) (fallback_to_greedy=False)")
