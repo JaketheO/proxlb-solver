@@ -334,6 +334,26 @@ from unittest.mock import MagicMock, patch as mock_patch
 from unittest.mock import patch
 
 
+def test_normalize_solver_cfg_defaults_fallback_for_pydantic():
+    """ProxLB Config.Solver must normalize without fallback_to_greedy field."""
+    from proxlb.utils.config_parser import Config
+    from proxlb_solver.shadow import _normalize_solver_cfg
+
+    cfg = Config.Solver(enable=True, log_dir="/tmp", mode="active")
+    normalized = _normalize_solver_cfg(cfg)
+
+    assert normalized.fallback_to_greedy is True
+    assert normalized.mode == "active"
+    assert normalized.log_dir == "/tmp"
+
+
+def test_normalize_solver_cfg_reads_fallback_from_dict():
+    from proxlb_solver.shadow import _normalize_solver_cfg
+
+    cfg = _normalize_solver_cfg({"fallback_to_greedy": False})
+    assert cfg.fallback_to_greedy is False
+
+
 def _make_mock_proxlb_modules(balancing_cls=None):
     """Return (mock_balancing_cls, sys_modules_patch_dict)."""
     if balancing_cls is None:
